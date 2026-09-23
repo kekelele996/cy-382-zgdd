@@ -18,7 +18,22 @@ docker compose up -d --build
 - 行程协作看板维护每日安排、住宿和交通方案。
 - 预算管理展示计划费用和实际花费。
 - Socket.IO 支持行程成员即时聊天。
-- 旅行日记和用户主页为后续扩展预留清晰模块。
+- **旅行日记多人共写与发布**：
+  - 行程成员只能修改本人创建的段落；保存草稿必须提交上次版本号，版本过期则整次修改被拒绝，服务端内容与他人段落保持不变（乐观锁 + 事务）。
+  - 行程结束前只能保存草稿；行程结束后仅发起人可发布，发布时冻结标题、段落顺序与作者昵称。
+  - 成员离队后其历史段落仍可查看但不能再改；重复发布只生效一次（幂等）。
+  - 刷新后版本冲突状态与发布状态始终以服务端为准。
+- 用户主页为后续扩展预留清晰模块。
+
+### 旅行日记演示账号
+
+初始化脚本内置三个账号，口令均为 `demo1234`：
+
+| 邮箱 | 角色 | 行程 #1（大理，已结束） | 行程 #2（青海湖，未结束） |
+| --- | --- | --- | --- |
+| `alice@example.com` | 发起人 | 在队，可发布 | 在队，仅可存草稿 |
+| `bob@example.com` | 普通成员 | 在队，可共写 | 在队 |
+| `carol@example.com` | 普通成员 | 已离队，段落只读 | 未加入 |
 
 ## 本地开发方式
 
@@ -33,6 +48,28 @@ cd frontend
 npm install
 npm run dev
 ```
+
+后端内置无需 MySQL/ Docker 的内存端到端用例（基于 sql.js），覆盖共写权限、版本冲突、离队、发布冻结与幂等、同版本并发提交等规则：
+
+```bash
+cd backend
+npm install
+npm run test:e2e
+```
+
+## 旅行日记接口
+
+所有接口需登录（`Authorization: Bearer <token>`）。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/trips/:tripId/diary` | 成员查看日记，返回版本号、发布状态与当前用户权限 |
+| PUT | `/api/trips/:tripId/diary` | 保存草稿，body 携带上次 `version`、`title`、本人段落变更 |
+| POST | `/api/trips/:tripId/diary/reorder` | 调整本人段落位置（他人段落相对顺序不变） |
+| POST | `/api/trips/:tripId/diary/publish` | 行程结束后发起人发布；重复发布幂等 |
+| GET/POST/DELETE | `/api/trips/:tripId/members[/me]` | 成员列表、加入、离队 |
+
+版本过期返回 `409 DIARY_VERSION_CONFLICT`，响应体 `data` 字段携带服务端最新日记，前端据此刷新合并。
 
 ## 技术栈
 
